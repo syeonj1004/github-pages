@@ -1,0 +1,5 @@
+{
+  "name": "QR 코드 마법사 (QR Code Wizard)",
+  "description": "웹사이트 주소를 QR 코드로 손쉽게 변환하거나, QR 코드 이미지를 스캔하여 원래의 주소를 찾아보세요. 빠르고 현대적인 QR 코드 도구입니다. (Easily generate QR codes from website URLs and decode QR code images to retrieve the original URL. A simple, fast, and modern tool for all your QR code needs.)",
+  "requestFramePermissions": []
+}
