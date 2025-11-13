@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인사이트 드로우</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 기본 폰트와 배경 설정 */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* 칠판 배경색 */
+        :root {
+            --chalkboard-color: #1e3a24;
+            --chalk-color: #f0f8ff; /* Almond/Chalk White */
+            --highlight-color: #fcd34d; /* Amber-300 */
+        }
+
+        /* 메인 컨테이너 (칠판) 스타일 */
+        .chalkboard-container {
+            background-color: var(--chalkboard-color);
+            border: 15px solid #6d4c41; /* 나무 프레임 느낌 */
+            border-radius: 12px;
+            box-shadow: 
+                0 0 10px rgba(0, 0, 0, 0.5), /* 내부 그림자 */
+                0 15px 25px rgba(0, 0, 0, 0.5); /* 외부 그림자 */
+            color: var(--chalk-color);
+        }
+
+        /* 캔버스 컨테이너 스타일 */
+        #canvas-container {
+            border: none;
+            border-radius: 8px; /* 프레임 내부 둥근 모서리 */
+            box-shadow: none; 
+            background-color: var(--chalkboard-color);
+            touch-action: none; 
+            position: relative; 
+        }
+        
+        /* 캔버스 스타일 - 커서를 분필 모양으로 변경 */
+        canvas {
+            display: block;
+            background-color: var(--chalkboard-color);
+            border-radius: 6px;
+            /* 칠판 질감 추가 */
+            filter: brightness(1.1) contrast(0.95);
+            /* Custom chalk cursor: 작은 흰색 원 (Data URL로 삽입) */
+            /* 8 8은 커서의 중심(핫스팟)을 설정합니다. */
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><circle cx='8' cy='8' r='3' style='fill:white; stroke:none;'/></svg>") 8 8, crosshair;
+        }
+
+        /* 컨트롤 패널 스타일 (색상/굵기) */
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background-color: rgba(0, 0, 0, 0.5); /* 투명한 어두운 배경 */
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+        }
+
+        /* 색상 버튼 스타일 */
+        .color-button {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+            transition: border-color 0.2s;
+        }
+        .color-button.active {
+            border-color: var(--highlight-color); /* 선택된 색상 테두리 */
+            box-shadow: 0 0 8px var(--highlight-color);
+        }
+        .color-palette {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap; 
+        }
+
+        /* 지우개 버튼 전용 스타일 */
+        .eraser-button {
+            background-color: #dcdcdc !important; /* 밝은 회색으로 시각적 강조 */
+            border: 2px solid #555;
+        }
+        .eraser-button svg {
+            color: #333; /* 지우개 아이콘 색상 */
+        }
+        /* 선택된 지우개 버튼의 테두리 색상 유지 */
+        .eraser-button.active {
+            border-color: var(--highlight-color);
+        }
+
+        /* 굵기 슬라이더 스타일 */
+        #brushSizeSlider {
+            width: 100px;
+            -webkit-appearance: none;
+            height: 8px;
+            border-radius: 5px;
+            background: #4b5563; /* Gray-600 */
+            outline: none;
+            opacity: 0.8;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+        }
+
+        #brushSizeSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--highlight-color);
+            cursor: pointer;
+            border: 2px solid var(--chalkboard-color);
+        }
+
+        #brushSizeSlider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--highlight-color);
+            cursor: pointer;
+            border: 2px solid var(--chalkboard-color);
+        }
+
+        /* 로딩 스피너 */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid var(--highlight-color);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="w-full max-w-2xl p-6 md:p-8 rounded-2xl shadow-2xl chalkboard-container">
+        <h1 class="text-3xl font-extrabold text-amber-300 text-center mb-6">
+            ✨ 인사이트 드로우 ✨
+        </h1>
+
+        <div id="canvas-container" class="mb-4">
+            <canvas id="drawingCanvas"></canvas>
+            
+            <!-- 색상 및 굵기 컨트롤 -->
+            <div id="controls">
+                <div class="color-palette">
+                    <!-- 색상 버튼이 여기에 동적으로 생성됩니다. -->
+                </div>
+                <!-- 펜 굵기 슬라이더 -->
+                <input type="range" id="brushSizeSlider" min="1" max="30" value="10">
+            </div>
+        </div>
+        
+        <!-- 컨트롤 버튼 및 결과 표시 -->
+        <div class="flex flex-col space-y-4">
+            
+            <div class="flex space-x-3">
+                <button id="guessButton" 
+                        class="flex-1 bg-indigo-700 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed border border-indigo-500">
+                    AI에게 추측 요청 (Guess)
+                </button>
+                <button id="clearButton" 
+                        class="bg-red-700 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl transition shadow-lg border border-red-500">
+                    지우개 (Clear)
+                </button>
+            </div>
+
+            <!-- 그림 안내 (간결하게 변경) -->
+            <div class="p-3 bg-gray-700/50 border border-gray-600 rounded-xl text-gray-200 text-sm">
+                **💡 부드러운 분필로 자유롭게 그림을 그려보세요!** AI가 무엇인지 추측할 거예요.
+            </div>
+
+            <div id="resultBox" class="p-4 rounded-xl shadow-inner bg-gray-800 border border-gray-700 min-h-[80px]">
+                <p id="statusText" class="text-gray-300 italic">
+                    캔버스에 그림을 그린 후 'AI에게 추측 요청' 버튼을 눌러보세요!
+                </p>
+                <!-- AI의 추측과 설명이 여기에 표시됩니다. -->
+                <p id="aiGuess" class="text-xl font-bold text-amber-300 mt-2 hidden"></p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- 1. 환경 설정 및 변수 선언 ---
+        const apiKey = ""; 
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+        
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const guessButton = document.getElementById('guessButton');
+        const clearButton = document.getElementById('clearButton');
+        const statusText = document.getElementById('statusText');
+        const aiGuess = document.getElementById('aiGuess');
+        const brushSizeSlider = document.getElementById('brushSizeSlider');
+        const colorPalette = document.querySelector('.color-palette');
+        const CHALKBOARD_COLOR = '#1e3a24'; // 칠판 배경색
+
+        let isDrawing = false;
+        let currentColor = '#FFFFFF'; // 기본 색상: 흰색 (분필)
+        let currentBrushSize = 10;   // 기본 굵기
+        let lastX, lastY;            // 이전 마우스 위치 추적 (분필 효과용)
+
+        
+        // 퀴즈 모드 항목 리스트 (총 281개, AI 추측의 기반으로 사용됨)
+        const QUIZ_ITEMS = [
+            // 1. 동물 (20)
+            '사자', '코끼리', '토끼', '고양이', '개', '펭귄', '돌고래',
+            '호랑이', '기린', '팬더', '여우', '곰', '양', '말', '새',
+            '오리', '코알라', '뱀', '전갈', '거미', 
+
+            // 2. 과일 (15)
+            '사과', '바나나', '딸기', '수박', '포도', '오렌지', '파인애플',
+            '배', '망고', '키위', '레몬', '복숭아', '체리', '블루베리', '감',
+            
+            // 3. 가정/도구 (15)
+            '의자', '책상', '시계', '전화기', '컵', '열쇠', '망치', '신발', 
+            '양말', '모자', '가방', 'TV', '냉장고', '자전거', '자동차',
+            
+            // 4. 자연/랜드마크 (16)
+            '나무', '꽃', '태양', '달', '별', '구름', '비', '눈', '얼음', 
+            '산', '바다', '강', '집', '다리', '탑', '피라미드',
+            
+            // 5. 음식/채소 (20)
+            '빵', '치즈', '계란', '밥', '국수', '샌드위치', '피자', 
+            '당근', '감자', '양파', '토마토', '버섯', '김치', '생선', '고기',
+            '샐러드', '소시지', '국', '옥수수', '브로콜리',
+
+            // 6. 직업/사람 (15)
+            '경찰', '소방관', '의사', '간호사', '선생님', '학생', '가수', 
+            '배우', '요리사', '군인', '왕', '공주', '아기', '노인', '친구',
+            
+            // 7. 감정/추상 (15)
+            '사랑', '행복', '슬픔', '분노', '꿈', '시간', '돈', '음악', 
+            '그림', '편지', '소리', '냄새', '빛', '그림자', '마음',
+            
+            // 8. 장소/기타 (15)
+            '학교', '병원', '공원', '서점', '기차', '버스', '배', 
+            '비행기', '우주선', '로봇', '공룡', '보석', '반지', '우산', '깃발',
+            
+            // 9. 색깔/패턴 (15)
+            '빨강', '파랑', '노랑', '초록', '검정', '흰색', '주황', '보라', '분홍', '갈색', 
+            '줄무늬', '물방울무늬', '체크무늬', '나선형', '무지개',
+            
+            // 10. 스포츠/취미 (15)
+            '축구', '농구', '야구', '수영', '달리기', '낚시', '독서', '그림 그리기', 
+            '노래', '춤', '피아노', '기타', '캠핑', '스키', '보드',
+            
+            // 11. 의류/액세서리 (15)
+            '티셔츠', '바지', '치마', '코트', '장갑', '목도리', '안경', '반지', 
+            '귀걸이', '시계', '벨트', '드레스', '운동화', '부츠', '넥타이',
+            
+            // 12. 과학/기술 (15)
+            '원자', '세포', 'DNA', '전구', '로켓', '컴퓨터', '렌즈', '자석', 
+            '현미경', '망원경', '전기', '중력', '바이러스', '온도계', '계산기',
+
+            // --- 신규 추가 100가지 ---
+            // 13. 역사/신화 (15)
+            '검', '방패', '왕관', '성', '미라', '드라큘라', '마법사', '인어', 
+            '천사', '악마', '유령', '해적', '공룡 화석', '조각상', '동굴 벽화',
+
+            // 14. 음악/악기 (15)
+            '바이올린', '드럼', '트럼펫', '플루트', '마이크', '스피커', '이어폰', '악보', 
+            '지휘봉', '헤드폰', '첼로', '하프', 'DJ', '콘서트', '춤추는 사람',
+
+            // 15. 우주/천문 (15)
+            '행성', '혜성', '운석', '외계인', '우주복', '위성', '은하수', '블랙홀', 
+            '우주 정거장', '달 탐사선', '별자리', '무중력', '유성', '천문대', '소행성',
+
+            // 16. 건물/건축 (15)
+            '고층 빌딩', '교회', '사원', '박물관', '도서관', '분수대', '가로등', '시계탑', 
+            '궁전', '아파트', '오두막', '우체국', '터널', '경기장', '에스컬레이터',
+
+            // 17. 지형/환경 (15)
+            '사막', '빙하', '화산', '폭포', '동굴', '절벽', '정글', '섬', 
+            '늪지대', '오아시스', '숲', '해변', '구름다리', '계곡', '운하',
+
+            // 18. 교통/운송 (15)
+            '트럭', '오토바이', '헬리콥터', '잠수함', '요트', '전차', '트랙터', '구급차', 
+            '택시', '소방차', '킥보드', '롤러코스터', '마차', '비행선', '썰매'
+        ];
+        
+        // 칠판에 사용할 분필 색상들: 흰색, 빨강, 주황, 노랑, 초록, 파랑, 보라, 핑크 + 지우개
+        const colors = [
+            '#FFFFFF', // 1. 흰색
+            '#FF0000', // 2. 빨간색
+            '#FFA500', // 3. 주황색
+            '#FFFF00', // 4. 노란색
+            '#008000', // 5. 초록색
+            '#0000FF', // 6. 파란색
+            '#800080', // 7. 보라색
+            '#FFC0CB', // 8. 핑크색
+            CHALKBOARD_COLOR // 9. 칠판색 (지우개 역할) - 기능적으로는 이 색상이 필요합니다.
+        ];
+
+        // --- 2. 캔버스 초기화 및 반응형 설정 ---
+        function initializeCanvas() {
+            const container = document.getElementById('canvas-container');
+            // 캔버스 크기를 컨테이너 폭과 500px 중 작은 값으로 설정 (정사각형, 크기 확대)
+            const size = Math.min(container.offsetWidth, 500); 
+            canvas.width = size;
+            canvas.height = size;
+            
+            // 기본 컨텍스트 설정
+            ctx.lineCap = 'round'; 
+            ctx.lineJoin = 'round';
+            
+            clearCanvas();
+        }
+
+        // 캔버스 내용 지우기
+        function clearCanvas() {
+            // 칠판 배경색으로 채우기
+            ctx.fillStyle = CHALKBOARD_COLOR;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            statusText.textContent = '캔버스에 그림을 그린 후 \'AI에게 추측 요청\' 버튼을 눌러보세요!';
+            aiGuess.classList.add('hidden');
+        }
+        
+        // --- 3. 드로잉 로직 (마우스 및 터치) ---
+
+        /**
+         * Get canvas coordinates from event (robustly handles mouse and touch).
+         */
+        function getCanvasPos(event) {
+            const rect = canvas.getBoundingClientRect();
+            
+            const point = (event.touches && event.touches.length > 0) ? event.touches[0] : event;
+
+            if (point.clientX === undefined || point.clientY === undefined) {
+                return null; 
+            }
+
+            return {
+                x: point.clientX - rect.left,
+                y: point.clientY - rect.top
+            };
+        }
+
+        /**
+         * 분필 질감을 구현하는 드로잉 함수.
+         * 여러 개의 무작위 오프셋 선을 그려 거칠고 부드러운 질감을 만듭니다.
+         */
+        function drawChalkEffect(x1, y1, x2, y2) {
+            const steps = 7; // 분필 가루 궤적의 수
+            const offsetMax = currentBrushSize * 0.3; // 최대 흔들림/오프셋 (굵기의 30%)
+            
+            for (let i = 0; i < steps; i++) {
+                // 시작점과 끝점에 무작위 오프셋(지터) 적용
+                const dx1 = (Math.random() - 0.5) * offsetMax;
+                const dy1 = (Math.random() - 0.5) * offsetMax;
+                const dx2 = (Math.random() - 0.5) * offsetMax;
+                const dy2 = (Math.random() - 0.5) * offsetMax;
+                
+                // 투명도와 굵기를 약간 무작위로 변경하여 질감 추가
+                ctx.globalAlpha = 0.5 * (0.5 + Math.random() * 0.5); // 25%~50%의 불투명도
+                ctx.lineWidth = currentBrushSize * (0.8 + Math.random() * 0.4); // 80%~120%의 굵기
+
+                ctx.beginPath();
+                ctx.strokeStyle = currentColor;
+
+                // 클릭만 했을 경우 (점 그리기)
+                if (x1 === x2 && y1 === y2) {
+                     ctx.arc(x1 + dx1, y1 + dy1, ctx.lineWidth / 2 * 0.5, 0, 2 * Math.PI);
+                     ctx.fillStyle = currentColor;
+                     ctx.fill();
+                } else {
+                     // 선분 그리기
+                     ctx.moveTo(x1 + dx1, y1 + dy1);
+                     ctx.lineTo(x2 + dx2, y2 + dy2);
+                     ctx.stroke();
+                }
+            }
+            // 글로벌 알파값은 다음 드로잉에 영향을 주지 않도록 초기화 (필수는 아니지만 안전을 위해)
+            ctx.globalAlpha = 1.0; 
+        }
+
+
+        function startDrawing(event) {
+            event.preventDefault(); 
+            isDrawing = true;
+            const pos = getCanvasPos(event);
+            
+            if (!pos) return; 
+
+            // 현재 위치 저장
+            lastX = pos.x;
+            lastY = pos.y;
+            
+            // 시작점(점) 그리기
+            drawChalkEffect(pos.x, pos.y, pos.x, pos.y);
+        }
+
+        function draw(event) {
+            if (!isDrawing) return;
+            event.preventDefault();
+            const pos = getCanvasPos(event);
+            
+            if (!pos) return; 
+            
+            // 이전 위치와 현재 위치 사이에 분필 효과 그리기
+            drawChalkEffect(lastX, lastY, pos.x, pos.y);
+
+            // 다음 세그먼트를 위해 위치 업데이트
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+        
+        // 이벤트 리스너 설정
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        document.addEventListener('mouseup', stopDrawing); 
+        canvas.addEventListener('touchstart', startDrawing);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchend', stopDrawing);
+        clearButton.addEventListener('click', clearCanvas);
+        guessButton.addEventListener('click', handleGuessRequest);
+
+        // 캔버스 초기화 및 리사이즈 이벤트
+        window.onload = initializeCanvas;
+        window.onresize = initializeCanvas;
+
+        // --- 4. 색상 및 굵기 컨트롤 로직 ---
+
+        // 색상 팔레트 생성
+        function createColorPalette() {
+            colors.forEach((color) => {
+                const colorButton = document.createElement('div');
+                colorButton.className = 'color-button group relative flex items-center justify-center'; // Added flex/relative for icon
+                colorButton.dataset.color = color;
+                
+                if (color === CHALKBOARD_COLOR) {
+                    // 칠판색 (지우개 역할)은 시각적으로 지우개처럼 보이도록 처리
+                    colorButton.classList.add('eraser-button');
+                    // Visually, make it look like a light gray eraser. Functional color is still CHALKBOARD_COLOR.
+                    
+                    // 지우개 아이콘 (간단한 SVG)
+                    colorButton.innerHTML = `
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <!-- Eraser Icon path -->
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                    `;
+                } else {
+                    colorButton.style.backgroundColor = color;
+                }
+                
+                colorButton.addEventListener('click', () => {
+                    selectColor(color);
+                });
+                colorPalette.appendChild(colorButton);
+            });
+            selectColor(currentColor);
+        }
+
+        // 색상 선택 함수
+        function selectColor(color) {
+            currentColor = color;
+            // 이제 색상은 drawChalkEffect 내에서 설정됨 (ctx.strokeStyle = currentColor;)
+
+            document.querySelectorAll('.color-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const selectedButton = document.querySelector(`.color-button[data-color="${color}"]`);
+            if (selectedButton) {
+                selectedButton.classList.add('active');
+            }
+        }
+
+        // 펜 굵기 변경 이벤트
+        brushSizeSlider.addEventListener('input', (event) => {
+            currentBrushSize = parseInt(event.target.value);
+            // 굵기는 drawChalkEffect 내에서 설정됨 (ctx.lineWidth = currentBrushSize * ...)
+        });
+
+        // 초기 색상 팔레트 생성
+        createColorPalette();
+
+        // --- 5. Gemini API 호출 로직 ---
+
+        /**
+         * Convert canvas content to Base64 PNG image data.
+         * @returns {string} Base64 data part
+         */
+        function getCanvasBase64Data() {
+            // Get PNG data URL and remove 'data:image/png;base64,' part.
+            const dataURL = canvas.toDataURL('image/png');
+            return dataURL.split(',')[1];
+        }
+
+        /**
+         * Request a guess from the AI and process the response.
+         */
+        async function handleGuessRequest() {
+            // Disable button and show loading state
+            guessButton.disabled = true;
+            statusText.innerHTML = '<span class="spinner inline-block align-middle mr-2"></span> AI가 그림을 분석 중입니다...';
+            aiGuess.classList.add('hidden');
+
+            const base64ImageData = getCanvasBase64Data();
+            
+            // AI에게 전달할 시스템 명령 및 퀴즈 리스트 (281가지 항목)
+            const quizListString = QUIZ_ITEMS.join(', ');
+            
+            // 시스템 프롬프트 수정: 이제 AI가 분석 과정을 설명하도록 요청하고, 출력 형식을 지정합니다.
+            const systemPrompt = `당신은 그림 퀴즈 AI이자 전문 분석가입니다. 사용자가 그린 그림을 분석하여 다음 ${QUIZ_ITEMS.length}가지 항목 중 가장 정확한 단어 하나를 추측하고 그 이유를 설명해야 합니다: ${quizListString}. 응답은 다음 형식으로 작성하세요: "제 추측은 [정답]입니다. 그 이유는 [짧은 분석 및 설명]입니다." 추측과 이유를 한 문단으로 간결하게 작성해주세요. 만약 이 목록 중 무엇인지 식별할 수 없다면 "정확히 무엇을 그린 것인지 파악하기 어렵습니다."라고만 대답하세요.`;
+            const userQuery = "이 그림은 무엇인가요? 위에서 제시된 단어 중 가장 근접한 단어 한 가지로 추측하고, 그 이유를 설명해 주세요.";
+
+            const payload = {
+                contents: [
+                    {
+                        role: "user",
+                        parts: [
+                            { text: userQuery },
+                            {
+                                inlineData: {
+                                    mimeType: "image/png",
+                                    data: base64ImageData
+                                }
+                            }
+                        ]
+                    }
+                ],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                }
+            };
+            
+            const maxRetries = 3;
+            let retryCount = 0;
+            
+            while (retryCount < maxRetries) {
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`API response failed: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    // 이제 AI는 추측과 이유를 포함한 문장을 반환합니다.
+                    const guess = result.candidates?.[0]?.content?.parts?.[0]?.text || "AI가 응답하지 못했습니다.";
+
+                    // Display result
+                    statusText.textContent = 'AI의 분석 및 추측:';
+                    aiGuess.textContent = guess; // 전체 설명을 표시
+                    aiGuess.classList.remove('hidden');
+
+                    break; // Exit loop on success
+
+                } catch (error) {
+                    console.error("API call error:", error);
+                    retryCount++;
+                    if (retryCount >= maxRetries) {
+                        // Max retries exceeded
+                        statusText.textContent = '❌ 통신 오류: AI에게 추측을 요청하는 데 실패했습니다. 콘솔을 확인해주세요.';
+                        aiGuess.classList.add('hidden');
+                        break;
+                    }
+                    // Exponential backoff wait
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+                }
+            }
+
+            // Re-enable button
+            guessButton.disabled = false;
+        }
+
+    </script>
+</body>
+</html>"
