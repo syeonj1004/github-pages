@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>맞춤형 음식 메뉴 추천 v2.0</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        /* --- Base & Custom Variables (Light Mode) --- */
+        :root {
+            --primary-bg: #EF4444; /* Red-500 */
+            --primary-text: #FFFFFF;
+            --body-bg: #FEE2E2; /* Red-100 */
+            --card-bg: #FFFFFF;
+            --text-color: #1F2937; /* Gray-800 */
+            --subtle-bg: #F9FAFB; /* Gray-50 */
+            --border-color: #FEE2E2; /* Red-100 */
+            --dynamic-color: #FFB6C1; /* Default Pastel Light Pink */
+            /* 요청에 따른 추가 변수: 카드 테두리 색상 */
+            --card-edge-color: #FFFFFF; /* Light Mode: White edge (흰색) */
+            --shadow-color: rgba(0, 0, 0, 0.1); /* Subtle dark shadow */
+        }
+
+        /* --- Dark Mode Variables --- */
+        [data-theme='dark'] {
+            --primary-bg: #DC2626; /* Red-600 */
+            --primary-text: #FEE2E2;
+            --body-bg: #111827; /* Gray-900 */
+            --card-bg: #1F2937; /* Gray-800 */
+            --text-color: #F3F4F6; /* Gray-100 */
+            --subtle-bg: #374151; /* Gray-700 */
+            --border-color: #374151; /* Gray-700 */
+            --dynamic-color: #B0E0E6; /* Default Pastel Powder Blue */
+            /* 요청에 따른 추가 변수: 카드 테두리 색상 */
+            --card-edge-color: #000000; /* Dark Mode: Black edge (검정색) */
+            --shadow-color: rgba(255, 255, 255, 0.05); /* Subtle light shadow */
+        }
+
+        /* --- Global Styles --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--body-bg);
+            color: var(--text-color);
+            min-height: 100vh;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .container-card {
+            background-color: var(--card-bg);
+            /* 테두리 배경색 요청에 따라 box-shadow 수정 (4px 흰색/검은색 테두리 효과) */
+            box-shadow: 0 0 0 4px var(--card-edge-color), 
+                        0 10px 30px -5px var(--shadow-color);
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        
+        /* --- Dynamic Header & Button Styling --- */
+        #header-banner {
+            background-color: var(--dynamic-color);
+            transition: background-color 0.5s ease-in-out;
+            /* 헤더 텍스트가 파스텔 톤에서도 잘 보이도록 텍스트 색상을 약간 어둡게 설정 */
+            color: var(--text-color); 
+        }
+        /* 헤더 텍스트 색상 오버라이드 (파스텔 톤 배경에 잘 보이도록) */
+        #header-banner h1, #header-banner p {
+            color: var(--text-color) !important;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3); /* 밝은 배경에서 가독성 향상 */
+        }
+        [data-theme='dark'] #header-banner h1, [data-theme='dark'] #header-banner p {
+            color: #1F2937 !important; /* Dark mode에서 파스텔 배경 사용 시, 텍스트는 어두운 색으로 */
+            text-shadow: none;
+        }
+
+        .btn-primary {
+            background-color: var(--dynamic-color);
+            /* 버튼 텍스트는 어둡게 설정하여 파스텔 배경에서 잘 보이도록 조정 */
+            color: var(--text-color); 
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        .btn-primary:hover {
+            opacity: 0.8;
+        }
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+        .text-dynamic {
+            color: var(--dynamic-color);
+        }
+        
+        /* --- Recommendation Result Styling --- */
+        .result-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+        }
+        .recipe-box {
+            background-color: var(--subtle-bg);
+            border: 1px solid var(--border-color);
+        }
+        
+        /* --- Loading Spinner --- */
+        .spinner {
+            border-top-color: var(--dynamic-color);
+            border-left-color: var(--dynamic-color);
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto">
+        
+        <!-- Header Banner & Theme Toggle -->
+        <header id="header-banner" class="rounded-t-xl text-center py-8 px-6 mb-4 shadow-lg flex justify-between items-start">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight mb-2">오늘의 메뉴 추천 🧑‍🍳</h1>
+                <p class="text-base">상황, 기분, 재료 등을 입력하면 딱 맞는 음식을 찾아드려요!</p>
+            </div>
+            
+            <!-- Dark Mode Toggle -->
+            <button id="theme-toggle" onclick="toggleTheme()" class="p-3 rounded-full bg-black bg-opacity-10 hover:bg-opacity-20 transition duration-200 focus:outline-none focus:ring-2 focus:ring-white">
+                <!-- Icon will be updated by JS -->
+                <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <svg id="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+            </button>
+        </header>
+
+        <!-- Main Content Card -->
+        <div class="container-card p-6 md:p-8 rounded-b-xl">
+            
+            <!-- 1. Input Section -->
+            <section class="mb-8 border-b pb-6 border-red-200 dark:border-gray-700">
+                <h2 class="text-2xl font-semibold mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-dynamic" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    추천 조건 입력 (상황, 기분, 날씨, 재료, 시간 등)
+                </h2>
+
+                <!-- Input Field -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    <input type="text" id="criteria-input" placeholder="예: 상황: 비 오는 날, 기분: 우울한, 재료: 돼지고기" 
+                           class="md:col-span-3 lg:col-span-1 p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 shadow-sm bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                           onkeydown="handleInputKey(event)">
+                    <button id="add-btn" onclick="addCriteria()" class="btn-primary font-medium py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-200 md:col-span-1 lg:col-span-1">
+                        조건 추가
+                    </button>
+                    <button id="recommend-btn" onclick="fetchRecommendation()" class="btn-primary font-medium py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition duration-200 md:col-span-1 lg:col-span-1" disabled>
+                        메뉴 추천 받기
+                    </button>
+                </div>
+
+                <!-- Criteria Tags Display -->
+                <div>
+                    <p class="text-sm font-medium mb-2 text-gray-500 dark:text-gray-400">현재 조건 (<span id="criteria-count">0</span>개):</p>
+                    <div id="criteria-tags" class="flex flex-wrap gap-2 min-h-[3rem] p-3 border border-dashed rounded-xl bg-gray-50 dark:bg-gray-700 border-dynamic">
+                        <!-- Tags will be dynamically inserted here -->
+                        <p id="empty-message" class="text-gray-500 dark:text-gray-400 italic text-sm self-center">조건을 입력하고 '조건 추가' 버튼을 눌러주세요.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Recommendation Section -->
+            <section>
+                <h2 class="text-2xl font-semibold mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-dynamic" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c1.657 0 3 .895 3 2s-1.343 2-3 2v2m0 0a3 3 0 003-3H9a3 3 0 003 3zm7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    추천 결과
+                </h2>
+
+                <div id="recommendation-output" class="p-6 result-card rounded-xl min-h-48 flex items-center justify-center text-center border-2 border-dashed border-gray-200 dark:border-gray-700">
+                    <p class="text-gray-500 dark:text-gray-400">조건을 입력한 후, 메뉴 추천 버튼을 눌러보세요!</p>
+                </div>
+
+            </section>
+        </div>
+
+    </div>
+
+    <script>
+        // API Configuration 
+        const apiKey = ""; 
+        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
+        const API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
+
+        // Application State
+        let criteriaList = [];
+        let isFetching = false;
+        
+        // Dynamic Color Palettes: 파스텔 톤으로 변경
+        const DYNAMIC_COLORS = [
+            '#FFB6C1', // Light Pink
+            '#B0E0E6', // Powder Blue
+            '#C1E1C1', // Mint Green
+            '#FDFD96', // Light Yellow
+            '#E6E6FA', // Lavender
+            '#FFA07A', // Light Salmon
+        ];
+
+        // UI Element References
+        const htmlElement = document.documentElement;
+        const criteriaInput = document.getElementById('criteria-input');
+        const criteriaTagsDiv = document.getElementById('criteria-tags');
+        const criteriaCountSpan = document.getElementById('criteria-count');
+        const emptyMessage = document.getElementById('empty-message');
+        const recommendBtn = document.getElementById('recommend-btn');
+        const recommendationOutput = document.getElementById('recommendation-output');
+        const themeIconLight = document.getElementById('theme-icon-light');
+        const themeIconDark = document.getElementById('theme-icon-dark');
+        const headerBanner = document.getElementById('header-banner');
+
+        // --- Theme Toggle Logic ---
+        
+        /**
+         * Updates the theme icon visibility.
+         * @param {string} theme - 'light' or 'dark'.
+         */
+        function updateThemeToggle(theme) {
+            // 헤더 색상이 밝은 파스텔톤이므로 토글 아이콘 색상을 어둡게 조정
+            const iconColor = theme === 'dark' ? 'text-gray-100' : 'text-gray-800';
+            
+            themeIconLight.classList.toggle('hidden', theme === 'dark');
+            themeIconDark.classList.toggle('hidden', theme !== 'dark');
+            
+            // 토글 버튼 아이콘 색상 설정
+            [themeIconLight, themeIconDark].forEach(icon => {
+                icon.classList.remove('text-white', 'text-gray-100', 'text-gray-800');
+                icon.classList.add(iconColor);
+            });
+        }
+
+        /**
+         * Toggles between light and dark mode.
+         */
+        function toggleTheme() {
+            const isDark = htmlElement.getAttribute('data-theme') === 'dark';
+            const newTheme = isDark ? 'light' : 'dark';
+            htmlElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeToggle(newTheme);
+        }
+
+        // --- Dynamic Styling Functions ---
+
+        /**
+         * Sets the dynamic color for the header and primary buttons.
+         * @param {string} colorHex - Hex color string (e.g., '#F97316').
+         */
+        function setDynamicHeaderColor(colorHex) {
+            htmlElement.style.setProperty('--dynamic-color', colorHex);
+        }
+
+        /**
+         * Picks a random color from the predefined palette.
+         * @returns {string} The selected hex color.
+         */
+        function getRandomDynamicColor() {
+            const randomIndex = Math.floor(Math.random() * DYNAMIC_COLORS.length);
+            return DYNAMIC_COLORS[randomIndex];
+        }
+
+
+        // --- Utility Functions ---
+
+        /**
+         * Renders the current list of criteria as removable tags in the UI.
+         */
+        function renderCriteria() {
+            criteriaTagsDiv.innerHTML = '';
+            
+            if (criteriaList.length === 0) {
+                emptyMessage.style.display = 'block';
+                recommendBtn.disabled = true;
+            } else {
+                emptyMessage.style.display = 'none';
+                recommendBtn.disabled = isFetching;
+                
+                const dynamicColor = htmlElement.style.getPropertyValue('--dynamic-color') || '#FFB6C1';
+                
+                criteriaList.forEach((criteria, index) => {
+                    const tag = document.createElement('div');
+                    // 파스텔 톤과 대비되는 색상으로 태그 배경 설정
+                    const tagBg = htmlElement.getAttribute('data-theme') === 'dark' ? 'bg-gray-600' : 'bg-gray-200';
+                    const tagText = htmlElement.getAttribute('data-theme') === 'dark' ? 'text-gray-100' : 'text-gray-800';
+                    const tagRemoveColor = htmlElement.getAttribute('data-theme') === 'dark' ? 'text-gray-300' : 'text-gray-600';
+
+                    tag.className = `flex items-center ${tagBg} ${tagText} text-sm font-semibold px-3 py-1 rounded-full whitespace-nowrap shadow-sm`;
+                    tag.innerHTML = `
+                        <span>${criteria}</span>
+                        <button onclick="removeCriteria(${index})" class="tag-remove-btn ml-2 ${tagRemoveColor} hover:text-gray-800 focus:outline-none dark:hover:text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    `;
+                    criteriaTagsDiv.appendChild(tag);
+                });
+            }
+
+            criteriaCountSpan.textContent = criteriaList.length;
+        }
+
+        /**
+         * Adds a new criteria from the input field to the list.
+         */
+        function addCriteria() {
+            const criteria = criteriaInput.value.trim();
+            if (criteria && !criteriaList.includes(criteria)) {
+                criteriaList.push(criteria);
+                criteriaInput.value = '';
+                renderCriteria();
+            }
+        }
+
+        /**
+         * Removes a criteria by its index from the list.
+         * @param {number} index - The index of the criteria to remove.
+         */
+        function removeCriteria(index) {
+            criteriaList.splice(index, 1);
+            renderCriteria();
+        }
+
+        /**
+         * Handles the Enter key press in the input field to add criteria.
+         * @param {KeyboardEvent} event 
+         */
+        function handleInputKey(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addCriteria();
+            }
+        }
+
+        /**
+         * Displays a loading spinner and message.
+         */
+        function showLoading() {
+            isFetching = true;
+            recommendBtn.disabled = true;
+            recommendBtn.textContent = '추천 중...';
+            
+            const dynamicColor = htmlElement.style.getPropertyValue('--dynamic-color');
+
+            recommendationOutput.innerHTML = `
+                <div class="flex flex-col items-center">
+                    <div class="spinner border-4 h-12 w-12 rounded-full border-gray-200 dark:border-gray-600 border-t-4 mb-3" style="border-top-color: ${dynamicColor}; border-left-color: ${dynamicColor};"></div>
+                    <p class="text-lg font-medium text-dynamic" style="color: ${dynamicColor}">최적의 메뉴들을 고르고 있어요...</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">이 과정은 몇 초가 소요될 수 있습니다.</p>
+                </div>
+            `;
+        }
+
+        /**
+         * Displays the recommendation results.
+         * @param {Array} recommendations - The parsed JSON array of recommendation objects.
+         * @param {Array} sources - Array of web sources (citations).
+         */
+        function showResult(recommendations, sources) {
+            
+            // Set new dynamic color after success
+            setDynamicHeaderColor(getRandomDynamicColor());
+            
+            if (!Array.isArray(recommendations) || recommendations.length === 0) {
+                showError("추천 메뉴를 생성하는 데 실패했습니다. 조건을 다시 확인해주세요.");
+                return;
+            }
+
+            // --- 1. Count/Title (가장 위쪽에 배치) ---
+            const dynamicColor = htmlElement.style.getPropertyValue('--dynamic-color');
+            let htmlContent = `
+                <h3 class="text-3xl font-extrabold text-dynamic mb-6 text-center" style="color: ${dynamicColor}">✨ 추천 메뉴 ${recommendations.length}가지 ✨</h3>
+
+                <!-- 2. Recommendation List -->
+                <div class="space-y-6 text-left mb-6">
+            `;
+
+            // Loop through each recommendation
+            recommendations.forEach((item, index) => {
+                const { foodName, emoji, recipe } = item;
+                
+                htmlContent += `
+                    <div class="result-card p-5 rounded-xl shadow-lg border border-dynamic dark:border-gray-700">
+                        <div class="flex items-center mb-3 border-b pb-2 border-dynamic border-opacity-30">
+                            <span class="text-4xl mr-3">${emoji}</span>
+                            <h4 class="text-2xl font-bold text-dynamic" style="color: ${dynamicColor}">#${index + 1}. ${foodName}</h4>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <p class="text-lg font-semibold mb-2 text-gray-700 dark:text-gray-300 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1 text-dynamic" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: ${dynamicColor}">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                </svg>
+                                간단 레시피
+                            </p>
+                            <div class="recipe-box p-3 rounded-lg border">
+                                <p class="text-gray-600 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">${recipe}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            htmlContent += `</div>`; // Close space-y-6 container
+
+            // Add source citation area
+            const sourceList = sources.map(s => `<a href="${s.uri}" target="_blank" class="text-blue-500 hover:text-blue-700 underline truncate block text-xs dark:text-blue-400 dark:hover:text-blue-300">${s.title || s.uri}</a>`).join('');
+
+            if (sources.length > 0) {
+                htmlContent += `
+                    <div class="mt-8 pt-4 border-t border-gray-200 dark:border-gray-700 text-left">
+                        <h4 class="text-sm font-semibold mb-1 text-gray-600 dark:text-gray-400">🔍 참고 정보 출처</h4>
+                        <div class="space-y-1">${sourceList}</div>
+                    </div>
+                `;
+            }
+
+            recommendationOutput.innerHTML = htmlContent;
+        }
+        
+        /**
+         * Displays an error message.
+         * @param {string} message - The error message.
+         */
+        function showError(message) {
+            recommendationOutput.innerHTML = `
+                <div class="text-center p-6 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 rounded-lg">
+                    <p class="text-red-700 dark:text-red-300 font-bold mb-2">😭 추천 실패</p>
+                    <p class="text-sm text-red-600 dark:text-red-400">${message}</p>
+                    <p class="text-xs text-red-500 dark:text-red-500 mt-2">API 키 설정 또는 네트워크 연결 상태를 확인해 주세요.</p>
+                </div>
+            `;
+        }
+
+        // --- Gemini API Logic ---
+
+        /**
+         * Fetches a food recommendation from the Gemini API with structured output.
+         */
+        async function fetchRecommendation() {
+            if (isFetching || criteriaList.length === 0) return;
+            showLoading();
+
+            const prompt = `사용자의 요청 조건들을 바탕으로 다양하고 가장 적합한 한국 음식 메뉴 3가지(서로 다른 종류)를 추천하고, 각 음식의 쉽고 간단한 레시피를 Markdown 형식으로 작성하여 JSON 배열로 제공하세요. **추천되는 3가지 메뉴는 이름과 종류가 모두 중복되지 않아야 합니다.**
+
+            요청 조건: ${criteriaList.join(', ')}
+            `;
+
+            const responseSchema = {
+                type: "ARRAY",
+                description: "사용자 조건에 맞는 3가지 음식 추천 목록",
+                items: {
+                    type: "OBJECT",
+                    properties: {
+                        "foodName": { "type": "STRING", "description": "추천할 음식의 이름 (한국어)" },
+                        "emoji": { "type": "STRING", "description": "음식을 나타내는 이모지 (예: 🍜)" },
+                        "recipe": { "type": "STRING", "description": "음식에 대한 상세하고 간단한 레시피 설명 (Markdown 형식 포함 가능)" }
+                    },
+                    propertyOrdering: ["foodName", "emoji", "recipe"]
+                }
+            };
+
+            // 시스템 명령어: 수정된 디저트 포함 규칙 유지
+            const systemInstruction = "당신은 한국 음식 전문 셰프이자 AI 추천 시스템입니다. 사용자의 다양한 조건(상황, 기분, 재료, 날씨, 시간 등)에 부합하는 메뉴 3가지를 선정하여, 이름, 관련 이모지, 그리고 자세한 레시피를 포함하는 JSON 배열 응답을 생성해야 합니다. \
+            - 만약 조건에 '디저트', '후식', '간식'과 관련된 내용이 포함되어 있다면, **3가지 디저트**를 추천합니다. \
+            - 그렇지 않다면, **2가지 다른 메인 요리** (찌개/국, 볶음/구이, 면/밥 등)와 **1가지 다양한 나라의 디저트**를 포함하여 총 3가지 메뉴를 추천합니다. \
+            추천되는 3가지 메뉴는 요리 종류가 중복되지 않아야 합니다. 레시피는 명확하고 따라하기 쉬워야 합니다. 한국어로 응답하세요.";
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: responseSchema
+                }
+            };
+
+            const MAX_RETRIES = 2;
+            let attempt = 0;
+
+            const apiUrl = `${API_BASE_URL}${MODEL_NAME}:generateContent?key=${apiKey}`;
+
+            while (attempt < MAX_RETRIES) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    const candidate = result.candidates?.[0];
+                    const jsonText = candidate?.content?.parts?.[0]?.text;
+
+                    if (!jsonText) {
+                         throw new Error("API 응답에서 유효한 JSON 텍스트를 찾을 수 없습니다.");
+                    }
+
+                    // 1. Extract and Parse JSON (결과는 배열)
+                    const recommendationData = JSON.parse(jsonText);
+
+                    // 2. Extract Grounding Sources (툴이 제거되었으므로 빈 배열)
+                    let sources = [];
+                    const groundingMetadata = candidate?.groundingMetadata;
+                    if (groundingMetadata?.groundingAttributions) {
+                        sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({
+                                uri: attribution.web?.uri,
+                                title: attribution.web?.title,
+                            }))
+                            .filter(source => source.uri); 
+                    }
+                    
+                    // Display the result and exit the loop
+                    showResult(recommendationData, sources);
+                    return; // Success, exit function
+
+                } catch (error) {
+                    console.error(`API Call Attempt ${attempt + 1} Failed:`, error);
+                    attempt++;
+
+                    if (attempt < MAX_RETRIES) {
+                        const delay = Math.pow(2, attempt) * 1000;
+                        console.log(`Retrying in ${delay / 1000} seconds...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        // All retries failed
+                        showError("메뉴 추천 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+                    }
+                } finally {
+                    isFetching = false;
+                    recommendBtn.textContent = '메뉴 추천 받기';
+                    renderCriteria();
+                }
+            }
+        }
+
+        // --- Initialization ---
+        window.onload = () => {
+            // 1. Load Theme from Local Storage
+            const storedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            htmlElement.setAttribute('data-theme', storedTheme);
+            updateThemeToggle(storedTheme);
+            
+            // 2. Set initial dynamic color (default pastel)
+            setDynamicHeaderColor(getRandomDynamicColor()); 
+
+            // 3. Render initial criteria state
+            renderCriteria();
+        };
+
+    </script>
+</body>
+</html>
